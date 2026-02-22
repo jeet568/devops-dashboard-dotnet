@@ -2,6 +2,7 @@ using DevOpsDashboard.API.Services;
 using Microsoft.OpenApi.Models;
 using DevOpsDashboard.API.Configurations;
 using DevOpsDashboard.API.Helpers;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,8 +13,15 @@ builder.Services.Configure<AppSettings>(
 
 // ── Core Services ──────────────────────────────────────────────
 builder.Services.AddControllers();
-builder.Services.AddHealthChecks();
 builder.Services.AddScoped<ISystemMonitorService, SystemMonitorService>();
+
+// ── Health Checks ──────────────────────────────────────────────
+// Each named check appears individually in /api/health/details
+builder.Services.AddHealthChecks()
+    .AddCheck<SystemResourceHealthCheck>(
+        name: "system_resources",
+        failureStatus: HealthStatus.Degraded,
+        tags: ["system", "resources"]);
 
 // ── Swagger ────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -66,6 +74,20 @@ app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHealthChecks("/health");
+
+// Orchestrator-friendly endpoint — returns JSON with overall status
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status    = report.Status.ToString(),
+            timestamp = DateTime.UtcNow
+        });
+        await context.Response.WriteAsync(result);
+    }
+});
 
 app.Run();
