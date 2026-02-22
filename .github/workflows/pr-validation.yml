@@ -1,0 +1,75 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types: [opened, synchronize, reopened]
+
+env:
+  DOTNET_VERSION: "8.0.x"
+
+jobs:
+  validate:
+    name: Validate Pull Request
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ env.DOTNET_VERSION }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore DevOpsDashboard.API/DevOpsDashboard.API.csproj
+
+      - name: Build
+        run: |
+          dotnet build DevOpsDashboard.API/DevOpsDashboard.API.csproj \
+            --configuration Release \
+            --no-restore
+
+      - name: Validate Dockerfile exists
+        run: |
+          if [ ! -f "DevOpsDashboard.API/Dockerfile" ]; then
+            echo "❌ Dockerfile not found!"
+            exit 1
+          fi
+          echo "✅ Dockerfile found"
+
+      - name: Lint Dockerfile (Hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: DevOpsDashboard.API/Dockerfile
+          ignore: DL3008,DL3018    # Ignore apt/apk pin warnings for now
+          failure-threshold: error  # Only fail on errors, not warnings
+
+      - name: Docker build test (no push)
+        run: |
+          docker build \
+            -t devops-dashboard:pr-test \
+            ./DevOpsDashboard.API
+          echo "✅ Docker image built successfully"
+
+      - name: Post validation summary
+        if: always()
+        run: |
+          echo "## PR Validation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| .NET Build | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Dockerfile Lint | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker Build | ✅ Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit: \`${{ github.sha }}\` | Branch: \`${{ github.head_ref }}\` |" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,39 @@
+version: "3.9"
+
+# Production compose file — pulls pre-built image from GitHub Container Registry.
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+#
+# Replace YOUR_GITHUB_USERNAME with your actual GitHub username.
+
+services:
+  devops-dashboard:
+    image: ghcr.io/YOUR_GITHUB_USERNAME/devops-dashboard:latest
+    container_name: devops-dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - devops-logs:/app/Logs
+      - devops-data:/app/Data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - devops-network
+
+volumes:
+  devops-logs:
+    driver: local
+  devops-data:
+    driver: local
+
+networks:
+  devops-network:
+    driver: bridge
