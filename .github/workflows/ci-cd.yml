@@ -119,12 +119,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          dockerfile: Dockerfile
+          file: ./Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gist,scope=${{ github.ref_name }}
-          cache-to: type=gist,scope=${{ github.ref_name }},mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/devops-dashboard:cache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/devops-dashboard:cache,mode=max
 
       - name: Output image details
         run: |
