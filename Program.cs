@@ -14,6 +14,7 @@ builder.Services.Configure<AppSettings>(
 // ── Core Services ──────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddScoped<ISystemMonitorService, SystemMonitorService>();
+builder.Services.AddScoped<ILogReaderService, LogReaderService>();
 
 // ── Health Checks ──────────────────────────────────────────────
 // Each named check appears individually in /api/health/details
@@ -54,6 +55,16 @@ var appSettings = builder.Configuration
     .GetSection("AppSettings").Get<AppSettings>() ?? new AppSettings();
 
 LogHelper.EnsureLogFileExists(appSettings.LogFilePath);
+
+// ── Seed startup log entries ───────────────────────────────────
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  "DevOps Dashboard API starting up");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  $"Environment: {app.Environment.EnvironmentName}");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  $"Machine: {Environment.MachineName}");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  $"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+LogHelper.WriteLog(appSettings.LogFilePath, "DEBUG", "Dependency injection container configured");
+LogHelper.WriteLog(appSettings.LogFilePath, "DEBUG", "Swagger UI enabled");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  "Health check endpoints registered");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  "DevOps Dashboard API is ready to serve requests");
 
 if (!Directory.Exists("Data"))
     Directory.CreateDirectory("Data");
