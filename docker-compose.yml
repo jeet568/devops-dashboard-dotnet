@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  devops-dashboard:
+    image: devops-dashboard:latest
+    build:
+      context: ./DevOpsDashboard.API
+      dockerfile: Dockerfile
+    container_name: devops-dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      # Mount Docker socket so the API can monitor other containers.
+      # This is the standard pattern used by Portainer, cAdvisor, etc.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Persist logs and data outside the container so they survive restarts
+      - devops-logs:/app/Logs
+      - devops-data:/app/Data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - devops-network
+
+# Named volumes — data persists across container restarts and rebuilds
+volumes:
+  devops-logs:
+    driver: local
+  devops-data:
+    driver: local
+
+# Isolated network — add more services here and they can talk to each other
+networks:
+  devops-network:
+    driver: bridge

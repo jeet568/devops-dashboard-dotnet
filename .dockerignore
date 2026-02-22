@@ -1,0 +1,36 @@
+# Build output — never copy these into the image
+bin/
+obj/
+
+# Git history — not needed in the image
+.git/
+.gitignore
+
+# IDE and editor files
+.vs/
+.vscode/
+*.user
+*.suo
+*.DotSettings
+
+# Environment files — never bake secrets into an image
+.env
+.env.*
+appsettings.Development.json
+
+# Docker files themselves
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Logs and data — these are runtime artifacts, not source
+Logs/
+Data/
+
+# Test projects if you add them later
+**/*Tests*/
+**/*Test*/
+
+# OS artifacts
+.DS_Store
+Thumbs.db

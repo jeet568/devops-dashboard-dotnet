@@ -1,0 +1,23 @@
+version: "3.9"
+
+# This file is automatically loaded by docker-compose in development.
+# It overrides/extends docker-compose.yml for local development only.
+# In CI/CD, use: docker-compose -f docker-compose.yml up (omits this file)
+
+services:
+  devops-dashboard:
+    build:
+      context: ./DevOpsDashboard.API
+      dockerfile: Dockerfile
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      # Expose Swagger on a different port locally so you can run
+      # the API natively AND in Docker simultaneously without conflict
+      - "8080:8080"
+    volumes:
+      # In dev, bind-mount local Logs and Data folders so you can
+      # inspect files directly without entering the container
+      - ./DevOpsDashboard.API/Logs:/app/Logs
+      - ./DevOpsDashboard.API/Data:/app/Data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
