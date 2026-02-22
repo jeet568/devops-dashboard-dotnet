@@ -1,6 +1,8 @@
+using DevOpsDashboard.API.Services;  
 using Microsoft.OpenApi.Models;
 using DevOpsDashboard.API.Configurations;
 using DevOpsDashboard.API.Helpers;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +13,7 @@ builder.Services.Configure<AppSettings>(
 // ── Core Services ──────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddHealthChecks();
+builder.Services.AddScoped<ISystemMonitorService, SystemMonitorService>();
 
 // ── Swagger ────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
