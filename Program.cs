@@ -16,6 +16,14 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<ISystemMonitorService, SystemMonitorService>();
 builder.Services.AddScoped<ILogReaderService, LogReaderService>();
 builder.Services.AddScoped<IDeploymentService, DeploymentService>();
+builder.Services.AddScoped<IDockerMonitorService, DockerMonitorService>();
+
+// ── Docker HTTP Client (Unix socket) ───────────────────────────
+builder.Services.AddHttpClient("docker", client =>
+{
+    client.BaseAddress = new Uri("http://localhost/");
+    client.Timeout     = TimeSpan.FromSeconds(10);
+}).ConfigurePrimaryHttpMessageHandler(DockerSocketHandler.Create);
 
 // ── Health Checks ──────────────────────────────────────────────
 // Each named check appears individually in /api/health/details
