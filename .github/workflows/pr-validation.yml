@@ -8,7 +8,7 @@ on:
     types: [opened, synchronize, reopened]
 
 env:
-  DOTNET_VERSION: "8.0.x"
+  DOTNET_VERSION: "9.0.x"
 
 jobs:
   validate:
@@ -33,17 +33,17 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: Restore dependencies
-        run: dotnet restore DevOpsDashboard.API/DevOpsDashboard.API.csproj
+        run: dotnet restore DevOpsDashboard.csproj
 
       - name: Build
         run: |
-          dotnet build DevOpsDashboard.API/DevOpsDashboard.API.csproj \
+          dotnet build DevOpsDashboard.csproj \
             --configuration Release \
             --no-restore
 
       - name: Validate Dockerfile exists
         run: |
-          if [ ! -f "DevOpsDashboard.API/Dockerfile" ]; then
+          if [ ! -f "Dockerfile" ]; then
             echo "❌ Dockerfile not found!"
             exit 1
           fi
@@ -52,15 +52,13 @@ jobs:
       - name: Lint Dockerfile (Hadolint)
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: DevOpsDashboard.API/Dockerfile
-          ignore: DL3008,DL3018    # Ignore apt/apk pin warnings for now
-          failure-threshold: error  # Only fail on errors, not warnings
+          dockerfile: Dockerfile
+          ignore: DL3008,DL3018
+          failure-threshold: error
 
       - name: Docker build test (no push)
         run: |
-          docker build \
-            -t devops-dashboard:pr-test \
-            ./DevOpsDashboard.API
+          docker build -t devops-dashboard:pr-test .
           echo "✅ Docker image built successfully"
 
       - name: Post validation summary

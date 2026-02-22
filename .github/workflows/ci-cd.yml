@@ -9,8 +9,6 @@ on:
     branches:
       - main
 
-# Ensures only one deployment runs at a time.
-# If a new push comes in, the in-progress run is cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -21,10 +19,6 @@ env:
   REGISTRY: ghcr.io
 
 jobs:
-  # ─────────────────────────────────────────────
-  # JOB 1: Build & Test
-  # Runs on every push and every PR
-  # ─────────────────────────────────────────────
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
@@ -38,7 +32,6 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      # Cache NuGet packages — dramatically speeds up subsequent runs
       - name: Cache NuGet packages
         uses: actions/cache@v4
         with:
@@ -65,7 +58,6 @@ jobs:
             --logger "trx;LogFileName=test-results.trx" \
             || echo "No tests found — skipping"
 
-      # Upload test results as an artifact so you can inspect them in GitHub UI
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -74,7 +66,6 @@ jobs:
           path: "**/*.trx"
           retention-days: 7
 
-      # Upload the publish output so the Docker job can use it
       - name: Publish application
         run: |
           dotnet publish DevOpsDashboard.csproj \
@@ -89,20 +80,13 @@ jobs:
           path: ./publish
           retention-days: 1
 
-  # ─────────────────────────────────────────────
-  # JOB 2: Docker Build & Push
-  # Runs only on pushes to main (not PRs)
-  # Depends on build-and-test passing first
-  # ─────────────────────────────────────────────
   docker-build-push:
     name: Docker Build & Push
     runs-on: ubuntu-latest
     needs: build-and-test
 
-    # Only run on pushes to main — not on PRs
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-    # Required permissions to push to GHCR
     permissions:
       contents: read
       packages: write
@@ -111,11 +95,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Extract metadata for Docker tags and labels.
-      # Automatically generates tags like:
-      #   ghcr.io/username/devops-dashboard:latest
-      #   ghcr.io/username/devops-dashboard:main
-      #   ghcr.io/username/devops-dashboard:sha-a1b2c3d
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -126,13 +105,9 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      # Set up Docker Buildx for advanced build features
-      # (build caching, multi-platform support)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Login to GitHub Container Registry using the automatic GITHUB_TOKEN
-      # No secrets to configure — it just works for GHCR
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -140,13 +115,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Build and push with layer caching.
-      # Cache is stored in GHCR itself — no external cache store needed.
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          dockerfile: ./Dockerfile
+          dockerfile: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
