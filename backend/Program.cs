@@ -1,9 +1,8 @@
-using DevOpsDashboard.API.Services;  
+using DevOpsDashboard.API.Services;
 using Microsoft.OpenApi.Models;
 using DevOpsDashboard.API.Configurations;
 using DevOpsDashboard.API.Helpers;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,11 +21,10 @@ builder.Services.AddScoped<IDockerMonitorService, DockerMonitorService>();
 builder.Services.AddHttpClient("docker", client =>
 {
     client.BaseAddress = new Uri("http://localhost/");
-    client.Timeout     = TimeSpan.FromSeconds(10);
+    client.Timeout = TimeSpan.FromSeconds(10);
 }).ConfigurePrimaryHttpMessageHandler(DockerSocketHandler.Create);
 
 // ── Health Checks ──────────────────────────────────────────────
-// Each named check appears individually in /api/health/details
 builder.Services.AddHealthChecks()
     .AddCheck<SystemResourceHealthCheck>(
         name: "system_resources",
@@ -39,22 +37,26 @@ builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title       = "DevOps Dashboard API",
-        Version     = "v1",
+        Title = "DevOps Dashboard API",
+        Version = "v1",
         Description = "A production-grade DevOps monitoring backend built with ASP.NET Core 8",
-        Contact     = new OpenApiContact
+        Contact = new OpenApiContact
         {
             Name = "DevOps Dashboard",
-            Url  = new Uri("https://github.com")
+            Url = new Uri("https://github.com")
         }
     });
 });
 
-// ── CORS (useful when a frontend is added later) ───────────────
+// ── ✅ CORS (ALLOW NEXT.JS FRONTEND) ───────────────────────────
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
 });
 
 var app = builder.Build();
@@ -66,14 +68,14 @@ var appSettings = builder.Configuration
 LogHelper.EnsureLogFileExists(appSettings.LogFilePath);
 
 // ── Seed startup log entries ───────────────────────────────────
-LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  "DevOps Dashboard API starting up");
-LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  $"Environment: {app.Environment.EnvironmentName}");
-LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  $"Machine: {Environment.MachineName}");
-LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  $"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO", "DevOps Dashboard API starting up");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO", $"Environment: {app.Environment.EnvironmentName}");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO", $"Machine: {Environment.MachineName}");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO", $"Runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
 LogHelper.WriteLog(appSettings.LogFilePath, "DEBUG", "Dependency injection container configured");
 LogHelper.WriteLog(appSettings.LogFilePath, "DEBUG", "Swagger UI enabled");
-LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  "Health check endpoints registered");
-LogHelper.WriteLog(appSettings.LogFilePath, "INFO",  "DevOps Dashboard API is ready to serve requests");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO", "Health check endpoints registered");
+LogHelper.WriteLog(appSettings.LogFilePath, "INFO", "DevOps Dashboard API is ready to serve requests");
 
 if (!Directory.Exists("Data"))
     Directory.CreateDirectory("Data");
@@ -85,17 +87,19 @@ if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "DevOps Dashboard API v1");
-        options.RoutePrefix = string.Empty; // Swagger at root URL
+        options.RoutePrefix = string.Empty;
     });
 }
 
-app.UseCors("AllowAll");
+// ✅ Enable CORS BEFORE controllers
+app.UseCors("AllowFrontend");
+
 app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// Orchestrator-friendly endpoint — returns JSON with overall status
+// ── Health Endpoint ────────────────────────────────────────────
 app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     ResponseWriter = async (context, report) =>
@@ -103,7 +107,7 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         context.Response.ContentType = "application/json";
         var result = System.Text.Json.JsonSerializer.Serialize(new
         {
-            status    = report.Status.ToString(),
+            status = report.Status.ToString(),
             timestamp = DateTime.UtcNow
         });
         await context.Response.WriteAsync(result);
