@@ -26,15 +26,32 @@ interface UsePollingReturn {
   lastSuccessTime: number | null;
   /** Manually trigger a fetch */
   refetch: () => void;
+  /** Whether a fetch is currently in progress */
+  isFetching: boolean;
 }
 
 /**
- * Safe polling hook with:
+ * Calculate backoff delay with jitter for retry
+ * Exponential backoff: base * 2^attempt + random jitter
+ * Capped at 30 seconds max
+ */
+function getBackoffDelay(attempt: number): number {
+  const baseDelay = API_CONFIG.POLLING.RETRY_DELAY_MS;
+  const exponential = Math.min(baseDelay * Math.pow(2, attempt - 1), 30000);
+  // Add 0-500ms random jitter to prevent thundering herd
+  const jitter = Math.random() * 500;
+  return exponential + jitter;
+}
+
+/**
+ * Production-grade polling hook with:
  * - No duplicate intervals (single interval ref)
- * - No memory leaks (proper cleanup)
- * - Auto reconnect with backoff on failure
+ * - No memory leaks (proper cleanup with mounted guard)
+ * - Exponential backoff with jitter on failures
+ * - Request deduplication (isFetching guard)
  * - Connection state tracking
- * - Consecutive failure counting
+ * - Manual refetch capability
+ * - Safe callback refs (no stale closures)
  */
 export function usePolling<T>({
   fetchFn,
@@ -46,12 +63,15 @@ export function usePolling<T>({
   const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
   const [failureCount, setFailureCount] = useState(0);
   const [lastSuccessTime, setLastSuccessTime] = useState<number | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
 
   // Refs to prevent stale closures and duplicate intervals
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const backoffTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
   const mountedRef = useRef(true);
   const failureCountRef = useRef(0);
+  const enabledRef = useRef(enabled);
 
   // Stable reference to callbacks using refs
   const onSuccessRef = useRef(onSuccess);
@@ -71,14 +91,49 @@ export function usePolling<T>({
     fetchFnRef.current = fetchFn;
   }, [fetchFn]);
 
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
+
   /**
-   * Core fetch execution with guard against overlapping calls
+   * Clear all timers safely
+   */
+  const clearAllTimers = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (backoffTimeoutRef.current) {
+      clearTimeout(backoffTimeoutRef.current);
+      backoffTimeoutRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Start normal polling interval
+   */
+  const startPolling = useCallback(() => {
+    // Safety: clear any existing interval first
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+
+    intervalRef.current = setInterval(() => {
+      if (!isFetchingRef.current && mountedRef.current && enabledRef.current) {
+        executeFetch();
+      }
+    }, intervalMs);
+  }, [intervalMs]);
+
+  /**
+   * Core fetch execution with guards
    */
   const executeFetch = useCallback(async () => {
-    // Guard: skip if already fetching or component unmounted
+    // Guard: skip if already fetching or component unmounted or disabled
     if (isFetchingRef.current || !mountedRef.current) return;
 
     isFetchingRef.current = true;
+    setIsFetching(true);
 
     try {
       const data = await fetchFnRef.current();
@@ -86,56 +141,78 @@ export function usePolling<T>({
       // Guard: component might have unmounted during fetch
       if (!mountedRef.current) return;
 
-      // Success path
+      // Success path — reset failure tracking
+      const hadFailures = failureCountRef.current > 0;
       failureCountRef.current = 0;
       setFailureCount(0);
       setConnectionState('connected');
       setLastSuccessTime(Date.now());
       onSuccessRef.current(data);
+
+      // If recovering from failures, restart normal polling
+      if (hadFailures) {
+        clearAllTimers();
+        startPolling();
+      }
     } catch (error: unknown) {
       if (!mountedRef.current) return;
 
-      // Failure path
+      // Failure path — increment counter
       failureCountRef.current += 1;
       const currentFailures = failureCountRef.current;
       setFailureCount(currentFailures);
 
       if (currentFailures >= API_CONFIG.POLLING.MAX_CONSECUTIVE_FAILURES) {
         setConnectionState('error');
+
+        // Stop normal polling, switch to backoff retry
+        clearAllTimers();
+        const backoffDelay = getBackoffDelay(currentFailures);
+
+        backoffTimeoutRef.current = setTimeout(() => {
+          if (mountedRef.current && enabledRef.current) {
+            executeFetch();
+          }
+        }, backoffDelay);
       } else {
         setConnectionState('disconnected');
+        // Continue normal polling — it will retry on next tick
       }
 
       if (onErrorRef.current && error instanceof Error) {
         onErrorRef.current(error);
       }
     } finally {
-      isFetchingRef.current = false;
+      if (mountedRef.current) {
+        isFetchingRef.current = false;
+        setIsFetching(false);
+      }
     }
-  }, []);
+  }, [clearAllTimers, startPolling]);
 
   /**
-   * Manual refetch trigger
+   * Manual refetch trigger — resets failure count and restarts polling
    */
   const refetch = useCallback(() => {
-    executeFetch();
-  }, [executeFetch]);
+    failureCountRef.current = 0;
+    setFailureCount(0);
+    setConnectionState('connecting');
+    clearAllTimers();
+    executeFetch().then(() => {
+      if (mountedRef.current && enabledRef.current) {
+        startPolling();
+      }
+    });
+  }, [executeFetch, clearAllTimers, startPolling]);
 
   /**
    * Main polling lifecycle
-   * - Starts on mount / when enabled changes
-   * - Cleans up on unmount / when disabled
-   * - SINGLE interval — no duplicates possible
    */
   useEffect(() => {
     mountedRef.current = true;
 
     if (!enabled) {
-      // Clear any existing interval when disabled
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      clearAllTimers();
       return;
     }
 
@@ -145,28 +222,22 @@ export function usePolling<T>({
     // Execute immediately on enable
     executeFetch();
 
-    // Clear any previous interval before creating new one (safety)
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
+    // Start polling interval
+    startPolling();
 
-    // Create single polling interval
-    intervalRef.current = setInterval(executeFetch, intervalMs);
-
-    // Cleanup function — runs on unmount or dependency change
+    // Cleanup function
     return () => {
       mountedRef.current = false;
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      isFetchingRef.current = false;
+      clearAllTimers();
     };
-  }, [enabled, intervalMs, executeFetch]);
+  }, [enabled, executeFetch, startPolling, clearAllTimers]);
 
   return {
     connectionState,
     failureCount,
     lastSuccessTime,
     refetch,
+    isFetching,
   };
 }

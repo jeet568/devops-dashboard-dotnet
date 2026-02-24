@@ -7,6 +7,9 @@ interface DashboardHeaderProps {
   connectionState: ConnectionState;
   failureCount: number;
   lastUpdated: number | null;
+  isFetching?: boolean;
+  isTabVisible?: boolean;
+  isOnline?: boolean;
   onRetry: () => void;
 }
 
@@ -14,6 +17,9 @@ export default function DashboardHeader({
   connectionState,
   failureCount,
   lastUpdated,
+  isFetching = false,
+  isTabVisible = true,
+  isOnline = true,
   onRetry,
 }: DashboardHeaderProps) {
   return (
@@ -51,9 +57,19 @@ export default function DashboardHeader({
           <div className="flex items-center gap-4">
             {/* Polling indicator */}
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-900/50 border border-gray-800/50">
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              <div
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isTabVisible && isOnline
+                    ? 'bg-blue-400 animate-pulse'
+                    : 'bg-gray-600'
+                }`}
+              />
               <span className="text-[10px] text-gray-500 font-mono">
-                1s POLL
+                {!isOnline
+                  ? 'OFFLINE'
+                  : !isTabVisible
+                    ? 'PAUSED'
+                    : '1s POLL'}
               </span>
             </div>
 
@@ -61,6 +77,9 @@ export default function DashboardHeader({
               state={connectionState}
               failureCount={failureCount}
               lastUpdated={lastUpdated}
+              isFetching={isFetching}
+              isTabVisible={isTabVisible}
+              isOnline={isOnline}
               onRetry={onRetry}
             />
 
