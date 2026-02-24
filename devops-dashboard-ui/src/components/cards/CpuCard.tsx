@@ -1,11 +1,13 @@
 'use client';
 
-import { SystemStatus } from '@/types/system';
+import { SystemStatus, TimeSeriesPoint } from '@/types/system';
 import MetricGauge from '@/components/ui/MetricGauge';
 import StatusIndicator from '@/components/ui/StatusIndicator';
+import MiniSparkline from '@/components/charts/MiniSparkline';
 
 interface CpuCardProps {
   status: SystemStatus;
+  sparklineData?: TimeSeriesPoint[];
 }
 
 function getCpuLevel(value: number): 'healthy' | 'warning' | 'critical' {
@@ -14,8 +16,8 @@ function getCpuLevel(value: number): 'healthy' | 'warning' | 'critical' {
   return 'healthy';
 }
 
-export default function CpuCard({ status }: CpuCardProps) {
-  const cpuUsage = status?.cpuUsagePercent ?? 0;
+export default function CpuCard({ status, sparklineData = [] }: CpuCardProps) {
+  const cpuUsage = status.cpuUsagePercent ?? 0;
   const level = getCpuLevel(cpuUsage);
 
   return (
@@ -52,24 +54,37 @@ export default function CpuCard({ status }: CpuCardProps) {
           value={cpuUsage}
           color="#3b82f6"
           label="CPU Load"
-          subtitle={`${status?.processorCount ?? 0} cores`}
+          subtitle={`${status.processorCount} cores`}
         />
       </div>
 
+      {/* Mini sparkline */}
+      <div className="mt-3 px-1">
+        <MiniSparkline data={sparklineData} color="#3b82f6" height={35} />
+      </div>
+
       {/* Footer details */}
-      <div className="mt-4 pt-3 border-t border-gray-800">
+      <div className="mt-3 pt-3 border-t border-gray-800">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <p className="text-[10px] text-gray-500 font-mono uppercase">Cores</p>
             <p className="text-sm text-gray-300 font-mono font-medium">
-              {status?.processorCount ?? 0}
+              {status.processorCount}
             </p>
           </div>
           <div>
             <p className="text-[10px] text-gray-500 font-mono uppercase">Usage</p>
-            <p className="text-sm font-mono font-medium" style={{
-              color: level === 'critical' ? '#ef4444' : level === 'warning' ? '#f59e0b' : '#3b82f6'
-            }}>
+            <p
+              className="text-sm font-mono font-medium"
+              style={{
+                color:
+                  level === 'critical'
+                    ? '#ef4444'
+                    : level === 'warning'
+                      ? '#f59e0b'
+                      : '#3b82f6',
+              }}
+            >
               {cpuUsage.toFixed(2)}%
             </p>
           </div>

@@ -1,12 +1,14 @@
 'use client';
 
-import { SystemStatus } from '@/types/system';
+import { SystemStatus, TimeSeriesPoint } from '@/types/system';
 import MetricGauge from '@/components/ui/MetricGauge';
 import StatusIndicator from '@/components/ui/StatusIndicator';
 import ProgressBar from '@/components/ui/ProgressBar';
+import MiniSparkline from '@/components/charts/MiniSparkline';
 
 interface MemoryCardProps {
   status: SystemStatus;
+  sparklineData?: TimeSeriesPoint[];
 }
 
 function getMemoryLevel(value: number): 'healthy' | 'warning' | 'critical' {
@@ -16,19 +18,18 @@ function getMemoryLevel(value: number): 'healthy' | 'warning' | 'critical' {
 }
 
 function formatMB(mb: number | undefined): string {
-  if (!mb) return '0 MB';
+  if (mb === undefined || mb === null) {
+    return '0 MB';
+  }
   if (mb >= 1024) {
     return `${(mb / 1024).toFixed(1)} GB`;
   }
   return `${mb.toFixed(0)} MB`;
 }
 
-export default function MemoryCard({ status }: MemoryCardProps) {
-  const memoryUsage = status?.memoryUsagePercent ?? 0;
+export default function MemoryCard({ status, sparklineData = [] }: MemoryCardProps) {
+  const memoryUsage = status.memoryUsagePercent ?? 0;
   const level = getMemoryLevel(memoryUsage);
-  const totalMemory = status?.totalMemoryMB ?? 0;
-  const usedMemory = status?.usedMemoryMB ?? 0;
-  const availableMemory = status?.availableMemoryMB ?? 0;
 
   return (
     <div className="metric-card group">
@@ -64,16 +65,21 @@ export default function MemoryCard({ status }: MemoryCardProps) {
           value={memoryUsage}
           color="#a855f7"
           label="Memory"
-          subtitle={formatMB(totalMemory)}
+          subtitle={formatMB(status.totalMemoryMB)}
         />
       </div>
 
+      {/* Mini sparkline */}
+      <div className="mt-3 px-1">
+        <MiniSparkline data={sparklineData} color="#a855f7" height={35} />
+      </div>
+
       {/* Memory breakdown */}
-      <div className="mt-4 pt-3 border-t border-gray-800 space-y-3">
+      <div className="mt-3 pt-3 border-t border-gray-800 space-y-3">
         {/* Usage bar */}
         <ProgressBar
-          value={usedMemory}
-          maxValue={totalMemory}
+          value={status.usedMemoryMB}
+          maxValue={status.totalMemoryMB}
           showLabel
           showValue
           label="Used"
@@ -85,19 +91,19 @@ export default function MemoryCard({ status }: MemoryCardProps) {
           <div>
             <p className="text-[10px] text-gray-500 font-mono uppercase">Used</p>
             <p className="text-xs text-purple-400 font-mono font-medium">
-              {formatMB(usedMemory)}
+              {formatMB(status.usedMemoryMB)}
             </p>
           </div>
           <div>
             <p className="text-[10px] text-gray-500 font-mono uppercase">Free</p>
             <p className="text-xs text-emerald-400 font-mono font-medium">
-              {formatMB(availableMemory)}
+              {formatMB(status.availableMemoryMB)}
             </p>
           </div>
           <div>
             <p className="text-[10px] text-gray-500 font-mono uppercase">Total</p>
             <p className="text-xs text-gray-400 font-mono font-medium">
-              {formatMB(totalMemory)}
+              {formatMB(status.totalMemoryMB)}
             </p>
           </div>
         </div>
